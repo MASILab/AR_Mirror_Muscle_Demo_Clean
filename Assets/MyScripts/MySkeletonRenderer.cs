@@ -1,6 +1,6 @@
 ﻿/* Created by: Alex Wang, Anjie Wang
  * Date: 07/01/2019
- * MySkeletonRenderer is responsible for creating and rendering the joints and the bones.
+ * MySkeletonRenderer is responsible for creating and rendering the muscles, bones, and joints.
  * It is adapted from the original SkeletonRenderer from the Astra Orbbec SDK 2.0.16.
  */
 using UnityEngine.UI;
@@ -62,26 +62,12 @@ public class MySkeletonRenderer : MonoBehaviour
     public GameObject Prefab_LeftHand;
     public GameObject Prefab_RightHand;
 
-    private readonly float TestBoneThickness = 0.5f;
+    private readonly float BoneThickness = 1f;
+    private readonly float MuscleThickness = 2f;
+    private readonly float HeadThickness = 0.15f;
 
     #endregion
 
-    #region Selection joints
-
-    /* Selection joints
-     * Current Design: right and left hands as selection joints
-     * Switch between modes (Bone / Muscle / Joint)
-     */
-    private Astra.JointType selectionJointTypeA = Astra.JointType.LeftHand;     //use which joint(s) type as your selectionJoint
-    private Astra.JointType selectionJointTypeB = Astra.JointType.RightHand;
-    public GameObject SelectionJointPrefab;
-    public static string selectedBoneName = "";
-
-    private float baseSpineX = 0, leftHipX = 0, shoulderSpineY = 0, neckY = 0;
-    private float horizontalError = 0, verticalError = 0;
-
-    private readonly float SelectBoneMultiplyFactor = 3f;
-    #endregion
 
     void Start()
     {
@@ -134,15 +120,7 @@ public class MySkeletonRenderer : MonoBehaviour
                 joints = new GameObject[body.Joints.Length];
                 for (int i = 0; i < joints.Length; i++)
                 {
-                    var bodyJoint = body.Joints[i];
-                    if (bodyJoint.Type == selectionJointTypeA || bodyJoint.Type == selectionJointTypeB)
-                    {
-                        joints[i] = (GameObject)Instantiate(SelectionJointPrefab, Vector3.zero, Quaternion.identity);
-                    }
-                    else
-                    {
-                        joints[i] = (GameObject)Instantiate(JointPrefab, Vector3.zero, Quaternion.identity);
-                    }
+                    joints[i] = (GameObject)Instantiate(JointPrefab, Vector3.zero, Quaternion.identity);
                     joints[i].transform.SetParent(JointRoot);
                 }
                 _bodySkeletons.Add(body.Id, joints);
@@ -239,43 +217,13 @@ public class MySkeletonRenderer : MonoBehaviour
                     skeletonJoint.transform.rotation =
                         Quaternion.LookRotation(jointForward, jointUp);
 
-                    //if (bodyJoint.Type != Astra.JointType.LeftHand && bodyJoint.Type != Astra.JointType.RightHand)
-                    //{
-                        skeletonJoint.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
-                    //}
-
-                    /*
-                    if (bodyJoint.Type == Astra.JointType.LeftHand)
-                    {
-                        UpdateHandPoseVisual(skeletonJoint, body.HandPoseInfo.LeftHand);
-                    }
-                    else if (bodyJoint.Type == Astra.JointType.RightHand)
-                    {
-                        UpdateHandPoseVisual(skeletonJoint, body.HandPoseInfo.RightHand);
-                    }
-                    */
-
-
-
+                    skeletonJoint.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
                 }
                 else
                 {
                     if (skeletonJoint.activeSelf) skeletonJoint.SetActive(false);
                 }
             }
-
-            #region calculate errors
-            // calculate the horizontal/vertical Error for selection
-            if (baseSpineX != 0 && leftHipX != 0)
-            {
-                horizontalError = 0.5f * Mathf.Abs(baseSpineX - leftHipX);
-            }
-            if (neckY != 0 && shoulderSpineY != 0)
-            {
-                verticalError = 0.5f * Mathf.Abs(neckY - shoulderSpineY);
-            }
-
-            #endregion
 
             //Render the bones
             for (int i = 0; i < Bones.Length; i++)
@@ -310,7 +258,7 @@ public class MySkeletonRenderer : MonoBehaviour
                     //Scale the head
                     if (startJoint.Type == Astra.JointType.Neck)
                     {
-                        skeletonBone.transform.localScale = new Vector3(TestBoneThickness * 0.3f, magnitude * 1.5f, TestBoneThickness * 0.3f);
+                        skeletonBone.transform.localScale = new Vector3(HeadThickness, magnitude * 1.5f, HeadThickness);
                     }
                     //Scale the arms and the legs
                     else if (startJoint.Type == Astra.JointType.LeftShoulder || startJoint.Type == Astra.JointType.RightShoulder ||
@@ -318,34 +266,12 @@ public class MySkeletonRenderer : MonoBehaviour
                         startJoint.Type == Astra.JointType.LeftHip || startJoint.Type == Astra.JointType.RightHip ||
                         startJoint.Type == Astra.JointType.LeftKnee || startJoint.Type == Astra.JointType.RightKnee)
                     {
-                        skeletonBone.transform.localScale = new Vector3(TestBoneThickness * 4f, magnitude, TestBoneThickness * 4f);
+                        skeletonBone.transform.localScale = new Vector3(MuscleThickness, magnitude, MuscleThickness);
                     }
                     //Scale other bones
                     else
                     {
-                        skeletonBone.transform.localScale = new Vector3(TestBoneThickness * 2f , magnitude, TestBoneThickness * 2f);
-                    }
-                    #endregion
-
-                    #region Update selected bones
-                    //Rescale the selected bones
-                    if ((selectionJointTypeA != startJoint.Type && selectionJointTypeA != endJoint.Type)
-                         && (withinRange(joints[FindJointIndex(body, selectionJointTypeA)].transform.position, startPosition, endPosition)))
-                    {
-                        
-                        skeletonBone.transform.localScale = new Vector3(skeletonBone.transform.localScale.x * SelectBoneMultiplyFactor,
-                                                                        magnitude * SelectBoneMultiplyFactor,
-                                                                        skeletonBone.transform.localScale.z * SelectBoneMultiplyFactor);
-                        selectedBoneName = GetJointName(startJoint) + "_" + GetJointName(endJoint);
-                    }
-
-                    if ((selectionJointTypeB != startJoint.Type && selectionJointTypeB != endJoint.Type)
-                         && (withinRange(joints[FindJointIndex(body, selectionJointTypeB)].transform.position, startPosition, endPosition)))
-                    {
-                        skeletonBone.transform.localScale = new Vector3(skeletonBone.transform.localScale.x * SelectBoneMultiplyFactor,
-                                                                        magnitude * SelectBoneMultiplyFactor,
-                                                                        skeletonBone.transform.localScale.z * SelectBoneMultiplyFactor);
-                        selectedBoneName = GetJointName(startJoint) + "_" + GetJointName(endJoint);
+                        skeletonBone.transform.localScale = new Vector3(BoneThickness , magnitude, BoneThickness);
                     }
                     #endregion
                 }
@@ -381,33 +307,6 @@ public class MySkeletonRenderer : MonoBehaviour
     {
         float angle = radians * 180 / (float)Mathf.PI;
         return angle;
-    }
-
-    private bool withinRange(Vector3 posJ, Vector3 posA, Vector3 posB)
-    {
-        if (withinPoints(posJ.x, posA.x, posB.x, horizontalError) && withinPoints(posJ.y, posA.y, posB.y, verticalError))
-        {
-            return true;
-        }
-        else
-        {
-            return false;
-        }
-    }
-
-    private bool withinPoints(float x, float a, float b, float error = 0)
-    {
-        float tmp;
-        if (a > b)
-        {
-            tmp = a; a = b; b = tmp;
-        }
-        return x >= a - error && x <= b + error;
-    }
-
-    private string GetJointName(Astra.Joint joint)
-    {
-        return (joint.ToString().Split(' ')[1]).Split(',')[0];
     }
 
     IEnumerator GetRequest(string uri)
