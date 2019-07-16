@@ -178,18 +178,18 @@ public class MySkeletonRenderer : MonoBehaviour
                         skeletonJoint.SetActive(true);
                     }
 
-                    
+                    ///*
                     skeletonJoint.transform.localPosition =
                         new Vector3(bodyJoint.WorldPosition.X / 1000f,
                                     bodyJoint.WorldPosition.Y / 1000f,
                                     bodyJoint.WorldPosition.Z / 1000f);
-                    
+                    //*/
 
                     /*
                     skeletonJoint.transform.localPosition =
                          new Vector3(bodyJoint.DepthPosition.X / 1000f,
                                      -bodyJoint.DepthPosition.Y / 1000f);
-                    skeletonJoint.transform.localScale = NormalPoseScale;
+                    //skeletonJoint.transform.localScale = NormalPoseScale;
                     */
 
                     //skel.Joints[i].Orient.Matrix:
