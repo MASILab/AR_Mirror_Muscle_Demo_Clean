@@ -1,7 +1,9 @@
-﻿/* Created by: Alex Wang, Anjie Wang
+﻿/* Created by: Alex Wang
  * Date: 07/01/2019
  * MySkeletonRenderer is responsible for creating and rendering the muscles, bones, and joints.
  * It is adapted from the original SkeletonRenderer from the Astra Orbbec SDK 2.0.16.
+ * Important notes: The original SDK script contains a serious memory leak problem. Please see the comments in the code to see
+ * the solution
  */
 using UnityEngine.UI;
 using System.Collections.Generic;
@@ -16,12 +18,15 @@ public class MySkeletonRenderer : MonoBehaviour
     private Astra.Body[] _bodies;
     private Dictionary<int, GameObject[]> _bodySkeletons;
     private Dictionary<int, GameObject[]> _bodyBones;
+    private List<byte> _absentBodies;
+
 
     private readonly Vector3 NormalPoseScale = new Vector3(0.01f, 0.01f, 0.01f);
     private readonly Vector3 GripPoseScale = new Vector3(0.2f, 0.2f, 0.2f);
 
     public GameObject JointPrefab;
     public Transform JointRoot;
+    public Transform BoneRoot;
 
     public Toggle ToggleSeg = null;
     public Toggle ToggleSegBody = null;
@@ -74,6 +79,7 @@ public class MySkeletonRenderer : MonoBehaviour
         _bodySkeletons = new Dictionary<int, GameObject[]>();
         _bodyBones = new Dictionary<int, GameObject[]>();
         _bodies = new Astra.Body[Astra.BodyFrame.MaxBodies];
+        _absentBodies = new List<byte>();
     }
 
     public void OnNewFrame(Astra.BodyStream bodyStream, Astra.BodyFrame frame)
@@ -93,193 +99,271 @@ public class MySkeletonRenderer : MonoBehaviour
 
         frame.CopyBodyData(ref _bodies);
         UpdateSkeletonsFromBodies(_bodies);
+        DestroyAbsentBodies();
+        /*
         UpdateBodyFeatures(bodyStream, _bodies);
         UpdateSkeletonProfile(bodyStream);
         UpdateSkeletonOptimization(bodyStream);
+        */
     }
 
+    void DestroyAbsentBodies()
+    {
+        foreach (var bodyId in _absentBodies)
+        {
+            //Debug.Log("Destroy body Id: " + bodyId);
+            foreach (var joint in _bodySkeletons[bodyId])
+            {
+                //Debug.Log("Destroy joints");
+                Destroy(joint);
+            }
+            //For some reason if I iterate through _bodyBones[bodyId], Unity won't destroy the gameobjects
+            //Whoever figures this out in the future please let me know
+            //07/25/2019 Alex
+            foreach (Transform bone in BoneRoot)
+            {
+                if (bone.name == bodyId.ToString())
+                {
+                    //Debug.Log("Destroy bones");
+                    Destroy(bone.gameObject);
+                }
+            }
+            _bodySkeletons.Remove(bodyId);
+            _bodyBones.Remove(bodyId);
+        }
+        _absentBodies.Clear();
+    }
 
     void UpdateSkeletonsFromBodies(Astra.Body[] bodies)
     {
         foreach (var body in bodies)
         {
+            if (body.Status == Astra.BodyStatus.Tracking) {
+                GameObject[] joints;
+                GameObject[] bones;
+                bool newBody = false;
 
-            if (body.Status == Astra.BodyStatus.NotTracking)
-            {
-                continue;
-            }
-
-
-            GameObject[] joints;
-            GameObject[] bones;
-            bool newBody = false;
-
-            if (!_bodySkeletons.ContainsKey(body.Id) && !_bodyBones.ContainsKey(body.Id))
-            {
-                //Instantiate joint gameobjects
-                joints = new GameObject[body.Joints.Length];
-                for (int i = 0; i < joints.Length; i++)
+                if (!_bodySkeletons.ContainsKey(body.Id) && !_bodyBones.ContainsKey(body.Id))
                 {
-                    joints[i] = (GameObject)Instantiate(JointPrefab, Vector3.zero, Quaternion.identity);
-                    joints[i].transform.SetParent(JointRoot);
-                }
-                _bodySkeletons.Add(body.Id, joints);
+                    //Debug.Log("New Body detected. Id: " + body.Id);
+                    //Instantiate joint gameobjects
+                    joints = new GameObject[body.Joints.Length];
+                    for (int i = 0; i < joints.Length; i++)
+                    {
+                        joints[i] = (GameObject)Instantiate(JointPrefab, Vector3.zero, Quaternion.identity);
+                        joints[i].transform.SetParent(JointRoot);
+                        joints[i].name = (body.Id).ToString();
+                    }
+                    _bodySkeletons.Add(body.Id, joints);
 
-                //Instantiate bone gameobjects
-                bones = new GameObject[Bones.Length];
-                for (int i = 0; i < bones.Length; i++)
+                    //Instantiate bone gameobjects
+                    bones = new GameObject[Bones.Length];
+                    for (int i = 0; i < bones.Length; i++)
+                    {
+                        //VERY IMPORTANT!!!
+                        //MUST set the name and the parent of the bone immediately after instantiating!!!
+                        //Otherwise Unity creates a clone
+                        //07/25/2019 Alex
+                        bones[0] = (GameObject)Instantiate(Prefab_BaseSpine_MidSpine, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[0].name = (body.Id).ToString();
+                        bones[0].transform.SetParent(BoneRoot);
+                        bones[1] = (GameObject)Instantiate(Prefab_MidSpine_ShoulderSpine, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[1].name = (body.Id).ToString();
+                        bones[1].transform.SetParent(BoneRoot);
+                        bones[2] = (GameObject)Instantiate(Prefab_ShoulderSpine_Neck, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[2].name = (body.Id).ToString();
+                        bones[2].transform.SetParent(BoneRoot);
+                        bones[3] = (GameObject)Instantiate(Prefab_Head_bone, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[3].name = (body.Id).ToString();
+                        bones[3].transform.SetParent(BoneRoot);
+                        bones[4] = (GameObject)Instantiate(Prefab_ShoudlerSpine_LeftShoulder, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[4].name = (body.Id).ToString();
+                        bones[4].transform.SetParent(BoneRoot);
+                        bones[5] = (GameObject)Instantiate(Prefab_LeftShoulder_LeftElbow, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[5].name = (body.Id).ToString();
+                        bones[5].transform.SetParent(BoneRoot);
+                        bones[6] = (GameObject)Instantiate(Prefab_LeftElbow_LeftWrist, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[6].name = (body.Id).ToString();
+                        bones[6].transform.SetParent(BoneRoot);
+                        bones[7] = (GameObject)Instantiate(Prefab_LeftHand, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[7].name = (body.Id).ToString();
+                        bones[7].transform.SetParent(BoneRoot);
+                        bones[8] = (GameObject)Instantiate(Prefab_ShoulderSpine_RightShoulder, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[8].name = (body.Id).ToString();
+                        bones[8].transform.SetParent(BoneRoot);
+                        bones[9] = (GameObject)Instantiate(Prefab_RightShoulder_RightElbow, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[9].name = (body.Id).ToString();
+                        bones[9].transform.SetParent(BoneRoot);
+                        bones[10] = (GameObject)Instantiate(Prefab_RightElbow_RightWrist, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[10].name = (body.Id).ToString();
+                        bones[10].transform.SetParent(BoneRoot);
+                        bones[11] = (GameObject)Instantiate(Prefab_RightHand, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[11].name = (body.Id).ToString();
+                        bones[11].transform.SetParent(BoneRoot);
+                        bones[12] = (GameObject)Instantiate(Prefab_BaseSpine_LeftHip, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[12].name = (body.Id).ToString();
+                        bones[12].transform.SetParent(BoneRoot);
+                        bones[13] = (GameObject)Instantiate(Prefab_LeftHip_LeftKnee, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[13].name = (body.Id).ToString();
+                        bones[13].transform.SetParent(BoneRoot);
+                        bones[14] = (GameObject)Instantiate(Prefab_LeftKnee_LeftFoot, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[14].name = (body.Id).ToString();
+                        bones[14].transform.SetParent(BoneRoot);
+                        bones[15] = (GameObject)Instantiate(Prefab_BaseSpine_RightHip, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[15].name = (body.Id).ToString();
+                        bones[15].transform.SetParent(BoneRoot);
+                        bones[16] = (GameObject)Instantiate(Prefab_RightHip_RightKnee, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[16].name = (body.Id).ToString();
+                        bones[16].transform.SetParent(BoneRoot);
+                        bones[17] = (GameObject)Instantiate(Prefab_RightKnee_RightFoot, Vector3.zero, Quaternion.identity) as GameObject;
+                        bones[17].name = (body.Id).ToString();
+                        bones[17].transform.SetParent(BoneRoot);
+                    }
+                    _bodyBones.Add(body.Id, bones);
+
+                    newBody = true;
+                }
+                else
                 {
-                    bones[0] = (GameObject)Instantiate(Prefab_BaseSpine_MidSpine, Vector3.zero, Quaternion.identity);
-                    bones[1] = (GameObject)Instantiate(Prefab_MidSpine_ShoulderSpine, Vector3.zero, Quaternion.identity);
-                    bones[2] = (GameObject)Instantiate(Prefab_ShoulderSpine_Neck, Vector3.zero, Quaternion.identity);
-                    bones[3] = (GameObject)Instantiate(Prefab_Head_bone, Vector3.zero, Quaternion.identity);
-                    bones[4] = (GameObject)Instantiate(Prefab_ShoudlerSpine_LeftShoulder, Vector3.zero, Quaternion.identity);
-                    bones[5] = (GameObject)Instantiate(Prefab_LeftShoulder_LeftElbow, Vector3.zero, Quaternion.identity);
-                    bones[6] = (GameObject)Instantiate(Prefab_LeftElbow_LeftWrist, Vector3.zero, Quaternion.identity);
-                    bones[7] = (GameObject)Instantiate(Prefab_LeftHand, Vector3.zero, Quaternion.identity);
-                    bones[8] = (GameObject)Instantiate(Prefab_ShoulderSpine_RightShoulder, Vector3.zero, Quaternion.identity);
-                    bones[9] = (GameObject)Instantiate(Prefab_RightShoulder_RightElbow, Vector3.zero, Quaternion.identity);
-                    bones[10] = (GameObject)Instantiate(Prefab_RightElbow_RightWrist, Vector3.zero, Quaternion.identity);
-                    bones[11] = (GameObject)Instantiate(Prefab_RightHand, Vector3.zero, Quaternion.identity);
-                    bones[12] = (GameObject)Instantiate(Prefab_BaseSpine_LeftHip, Vector3.zero, Quaternion.identity);
-                    bones[13] = (GameObject)Instantiate(Prefab_LeftHip_LeftKnee, Vector3.zero, Quaternion.identity);
-                    bones[14] = (GameObject)Instantiate(Prefab_LeftKnee_LeftFoot, Vector3.zero, Quaternion.identity);
-                    bones[15] = (GameObject)Instantiate(Prefab_BaseSpine_RightHip, Vector3.zero, Quaternion.identity);
-                    bones[16] = (GameObject)Instantiate(Prefab_RightHip_RightKnee, Vector3.zero, Quaternion.identity);
-                    bones[17] = (GameObject)Instantiate(Prefab_RightKnee_RightFoot, Vector3.zero, Quaternion.identity);
+                    //Debug.Log("Existing body Id: " + body.Id);
+                    joints = _bodySkeletons[body.Id];
+                    bones = _bodyBones[body.Id];
+                }
+
+                //Log if a new body is detected
+                if (newBody)
+                {
+                    StartCoroutine(GetRequest("https://docs.google.com/forms/d/e/1FAIpQLSe9t2ffOIQF2zNo-W3mGsA0jW0Fpba65AW1vk8C8YI9o1Akyg/formResponse?entry.365241968=MUSCLEDEMO&fvv=1"));
+                }
+
+                //Render the joints
+                for (int i = 0; i < body.Joints.Length; i++)
+                {
+                    var skeletonJoint = joints[i];
+                    var bodyJoint = body.Joints[i];
+
+                    if (bodyJoint.Status != Astra.JointStatus.NotTracked)
+                    {
+                        if (!skeletonJoint.activeSelf)
+                        {
+                            skeletonJoint.SetActive(true);
+                        }
+
+                        ///*
+                        skeletonJoint.transform.localPosition =
+                            new Vector3(bodyJoint.WorldPosition.X / 1000f,
+                                        bodyJoint.WorldPosition.Y / 1000f,
+                                        bodyJoint.WorldPosition.Z / 1000f);
+                        //*/
+
+                        /*
+                        skeletonJoint.transform.localPosition =
+                             new Vector3(bodyJoint.DepthPosition.X / 1000f,
+                                         -bodyJoint.DepthPosition.Y / 1000f);
+                        //skeletonJoint.transform.localScale = NormalPoseScale;
+                        */
+
+                        //skel.Joints[i].Orient.Matrix:
+                        // 0, 			1,	 		2,
+                        // 3, 			4, 			5,
+                        // 6, 			7, 			8
+                        // -------
+                        // right(X),	up(Y), 		forward(Z)
+
+                        //Vector3 jointRight = new Vector3(
+                        //    bodyJoint.Orientation.M00,
+                        //    bodyJoint.Orientation.M10,
+                        //    bodyJoint.Orientation.M20);
+
+                        Vector3 jointUp = new Vector3(
+                            bodyJoint.Orientation.M01,
+                            bodyJoint.Orientation.M11,
+                            bodyJoint.Orientation.M21);
+
+                        Vector3 jointForward = new Vector3(
+                            bodyJoint.Orientation.M02,
+                            bodyJoint.Orientation.M12,
+                            bodyJoint.Orientation.M22);
+
+                        skeletonJoint.transform.rotation =
+                            Quaternion.LookRotation(jointForward, jointUp);
+
+                        skeletonJoint.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+                    }
+                    else
+                    {
+                        if (skeletonJoint.activeSelf) skeletonJoint.SetActive(false);
+                    }
+                }
+
+                //Render the bones
+                for (int i = 0; i < Bones.Length; i++)
+                {
+                    //actual gameobject bones
+                    var skeletonBone = bones[i];
+                    //bones a body should have
+                    var bodyBone = Bones[i];
+                    int startIndex = FindJointIndex(body, bodyBone._startJoint);
+                    int endIndex = FindJointIndex(body, bodyBone._endJoint);
+                    var startJoint = body.Joints[startIndex];
+                    var endJoint = body.Joints[endIndex];
+
+                    if (startJoint.Status != Astra.JointStatus.NotTracked && endJoint.Status != Astra.JointStatus.NotTracked)
+                    {
+                        if (!skeletonBone.activeSelf)
+                        {
+                            skeletonBone.SetActive(true);
+                        }
+
+
+                        #region Draw all bones
+                        Vector3 startPosition = joints[startIndex].transform.position;
+                        Vector3 endPosition = joints[endIndex].transform.position;
+
+                        float squaredMagnitude = Mathf.Pow(endPosition.x - startPosition.x, 2) + Mathf.Pow(endPosition.y - startPosition.y, 2);
+                        float magnitude = Mathf.Sqrt(squaredMagnitude);
+
+                        skeletonBone.transform.position = (startPosition + endPosition) / 2.0f;
+                        skeletonBone.transform.localEulerAngles = new Vector3(0, 0, find2DAngles(endPosition.x - startPosition.x, endPosition.y - startPosition.y));
+
+                        //Scale the head
+                        if (startJoint.Type == Astra.JointType.Neck)
+                        {
+                            skeletonBone.transform.localScale = new Vector3(HeadThickness, magnitude * 1.5f, HeadThickness);
+                        }
+                        //Scale the arms and the legs
+                        else if (startJoint.Type == Astra.JointType.LeftShoulder || startJoint.Type == Astra.JointType.RightShoulder ||
+                            startJoint.Type == Astra.JointType.LeftElbow || startJoint.Type == Astra.JointType.RightElbow ||
+                            startJoint.Type == Astra.JointType.LeftHip || startJoint.Type == Astra.JointType.RightHip ||
+                            startJoint.Type == Astra.JointType.LeftKnee || startJoint.Type == Astra.JointType.RightKnee)
+                        {
+                            skeletonBone.transform.localScale = new Vector3(MuscleThickness, magnitude, MuscleThickness);
+                        }
+                        //Scale other bones
+                        else
+                        {
+                            skeletonBone.transform.localScale = new Vector3(BoneThickness, magnitude, BoneThickness);
+                        }
+                        #endregion
+                    }
+                    else
+                    {
+                        if (skeletonBone.activeSelf) skeletonBone.SetActive(false);
+                    }
 
                 }
-                _bodyBones.Add(body.Id, bones);
-
-                newBody = true;
             }
             else
             {
-                joints = _bodySkeletons[body.Id];
-                bones = _bodyBones[body.Id];
-            }
-
-            //Log if a new body is detected
-            if (newBody)
-            {
-                StartCoroutine(GetRequest("https://docs.google.com/forms/d/e/1FAIpQLSe9t2ffOIQF2zNo-W3mGsA0jW0Fpba65AW1vk8C8YI9o1Akyg/formResponse?entry.365241968=MUSCLEDEMO&fvv=1"));
-            }
-
-            //Render the joints
-            for (int i = 0; i < body.Joints.Length; i++)
-            {
-                var skeletonJoint = joints[i];
-                var bodyJoint = body.Joints[i];
-
-                if (bodyJoint.Status != Astra.JointStatus.NotTracked)
+                //AstraDotNet seems to be using 0 to indicate that there is no body in the frame
+                if (body.Id != 0)
                 {
-                    if (!skeletonJoint.activeSelf)
-                    {
-                        skeletonJoint.SetActive(true);
-                    }
-
-                    ///*
-                    skeletonJoint.transform.localPosition =
-                        new Vector3(bodyJoint.WorldPosition.X / 1000f,
-                                    bodyJoint.WorldPosition.Y / 1000f,
-                                    bodyJoint.WorldPosition.Z / 1000f);
-                    //*/
-
-                    /*
-                    skeletonJoint.transform.localPosition =
-                         new Vector3(bodyJoint.DepthPosition.X / 1000f,
-                                     -bodyJoint.DepthPosition.Y / 1000f);
-                    //skeletonJoint.transform.localScale = NormalPoseScale;
-                    */
-
-                    //skel.Joints[i].Orient.Matrix:
-                    // 0, 			1,	 		2,
-                    // 3, 			4, 			5,
-                    // 6, 			7, 			8
-                    // -------
-                    // right(X),	up(Y), 		forward(Z)
-
-                    //Vector3 jointRight = new Vector3(
-                    //    bodyJoint.Orientation.M00,
-                    //    bodyJoint.Orientation.M10,
-                    //    bodyJoint.Orientation.M20);
-
-                    Vector3 jointUp = new Vector3(
-                        bodyJoint.Orientation.M01,
-                        bodyJoint.Orientation.M11,
-                        bodyJoint.Orientation.M21);
-
-                    Vector3 jointForward = new Vector3(
-                        bodyJoint.Orientation.M02,
-                        bodyJoint.Orientation.M12,
-                        bodyJoint.Orientation.M22);
-
-                    skeletonJoint.transform.rotation =
-                        Quaternion.LookRotation(jointForward, jointUp);
-
-                    skeletonJoint.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
+                    //VERY IMPORTANT!!!
+                    //Must maintain a list of bodies that are no longer being tracked!!!
+                    //07/25/2019 Alex
+                    _absentBodies.Add(body.Id);
+                    //Debug.Log("Absent body Id: " + body.Id);
                 }
-                else
-                {
-                    if (skeletonJoint.activeSelf) skeletonJoint.SetActive(false);
-                }
-            }
-
-            //Render the bones
-            for (int i = 0; i < Bones.Length; i++)
-            {
-                //actual gameobject bones
-                var skeletonBone = bones[i];
-                //bones a body should have
-                var bodyBone = Bones[i];
-                int startIndex = FindJointIndex(body, bodyBone._startJoint);
-                int endIndex = FindJointIndex(body, bodyBone._endJoint);
-                var startJoint = body.Joints[startIndex];
-                var endJoint = body.Joints[endIndex];
-
-                if (startJoint.Status != Astra.JointStatus.NotTracked && endJoint.Status != Astra.JointStatus.NotTracked)
-                {
-                    if (!skeletonBone.activeSelf)
-                    {
-                        skeletonBone.SetActive(true);
-                    }
-
-
-                    #region Draw all bones
-                    Vector3 startPosition = joints[startIndex].transform.position;
-                    Vector3 endPosition = joints[endIndex].transform.position;
-
-                    float squaredMagnitude = Mathf.Pow(endPosition.x - startPosition.x, 2) + Mathf.Pow(endPosition.y - startPosition.y, 2);
-                    float magnitude = Mathf.Sqrt(squaredMagnitude);
-
-                    skeletonBone.transform.position = (startPosition + endPosition) / 2.0f;
-                    skeletonBone.transform.localEulerAngles = new Vector3(0, 0, find2DAngles(endPosition.x - startPosition.x, endPosition.y - startPosition.y));
-
-                    //Scale the head
-                    if (startJoint.Type == Astra.JointType.Neck)
-                    {
-                        skeletonBone.transform.localScale = new Vector3(HeadThickness, magnitude * 1.5f, HeadThickness);
-                    }
-                    //Scale the arms and the legs
-                    else if (startJoint.Type == Astra.JointType.LeftShoulder || startJoint.Type == Astra.JointType.RightShoulder ||
-                        startJoint.Type == Astra.JointType.LeftElbow || startJoint.Type == Astra.JointType.RightElbow ||
-                        startJoint.Type == Astra.JointType.LeftHip || startJoint.Type == Astra.JointType.RightHip ||
-                        startJoint.Type == Astra.JointType.LeftKnee || startJoint.Type == Astra.JointType.RightKnee)
-                    {
-                        skeletonBone.transform.localScale = new Vector3(MuscleThickness, magnitude, MuscleThickness);
-                    }
-                    //Scale other bones
-                    else
-                    {
-                        skeletonBone.transform.localScale = new Vector3(BoneThickness , magnitude, BoneThickness);
-                    }
-                    #endregion
-                }
-                else
-                {
-                    if (skeletonBone.activeSelf) skeletonBone.SetActive(false);
-                }
-
             }
 
         }
