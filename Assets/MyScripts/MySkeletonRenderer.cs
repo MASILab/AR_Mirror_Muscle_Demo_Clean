@@ -111,25 +111,36 @@ public class MySkeletonRenderer : MonoBehaviour
     {
         foreach (var bodyId in _absentBodies)
         {
-            //Debug.Log("Destroy body Id: " + bodyId);
-            foreach (var joint in _bodySkeletons[bodyId])
+            //VERY IMPORTANT!!!
+            //MUST use try-catch here in order to avoid KeyNotFoundException
+            //This exception will occur whenever a body transitions directly from TrackingStarted to Lost!!!
+            //07/26/2019 Alex
+            try
             {
-                //Debug.Log("Destroy joints");
-                Destroy(joint);
-            }
-            //For some reason if I iterate through _bodyBones[bodyId], Unity won't destroy the gameobjects
-            //Whoever figures this out in the future please let me know
-            //07/25/2019 Alex
-            foreach (Transform bone in BoneRoot)
-            {
-                if (bone.name == bodyId.ToString())
+                //Debug.Log("Destroy body Id: " + bodyId);
+                foreach (var joint in _bodySkeletons[bodyId])
                 {
-                    //Debug.Log("Destroy bones");
-                    Destroy(bone.gameObject);
+                    //Debug.Log("Destroy joints");
+                    Destroy(joint);
                 }
+                //For some reason if I iterate through _bodyBones[bodyId], Unity won't destroy the gameobjects
+                //Whoever figures this out in the future please let me know
+                //07/25/2019 Alex
+                foreach (Transform bone in BoneRoot)
+                {
+                    if (bone.name == bodyId.ToString())
+                    {
+                        //Debug.Log("Destroy bones");
+                        Destroy(bone.gameObject);
+                    }
+                }
+                _bodySkeletons.Remove(bodyId);
+                _bodyBones.Remove(bodyId);
             }
-            _bodySkeletons.Remove(bodyId);
-            _bodyBones.Remove(bodyId);
+            catch (KeyNotFoundException e)
+            {
+                //Debug.Log("Body Status transitioned directly from StartedTracking to Lost");
+            }
         }
         _absentBodies.Clear();
     }
