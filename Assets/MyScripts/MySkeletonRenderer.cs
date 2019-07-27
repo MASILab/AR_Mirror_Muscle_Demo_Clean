@@ -169,8 +169,6 @@ public class MySkeletonRenderer : MonoBehaviour
 
                     //Instantiate bone gameobjects
                     bones = new GameObject[Bones.Length];
-                    for (int i = 0; i < bones.Length; i++)
-                    {
                         //VERY IMPORTANT!!!
                         //MUST set the name and the parent of the bone immediately after instantiating!!!
                         //Otherwise Unity creates a clone
@@ -229,7 +227,6 @@ public class MySkeletonRenderer : MonoBehaviour
                         bones[17] = (GameObject)Instantiate(Prefab_RightKnee_RightFoot, Vector3.zero, Quaternion.identity) as GameObject;
                         bones[17].name = (body.Id).ToString();
                         bones[17].transform.SetParent(BoneRoot);
-                    }
                     _bodyBones.Add(body.Id, bones);
 
                     newBody = true;
